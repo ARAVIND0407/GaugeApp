@@ -1,6 +1,7 @@
 import { ThemeProvider } from "@/contexts/ThemeContext";
-import type { ReactNode } from "react";
 import { TaskProvider } from "@/contexts/TaskContext";
+import { UiProvider } from "@/contexts/UiContext";
+import type { ReactNode } from "react";
 
 type Props = {
   children: ReactNode;
@@ -9,7 +10,9 @@ type Props = {
 const Providers = ({ children }: Props) => {
   return (
     <ThemeProvider defaultTheme="dark" storageKey="gauge-theme">
-      <TaskProvider>{children}</TaskProvider>
+      <TaskProvider>
+        <UiProvider>{children}</UiProvider>
+      </TaskProvider>
     </ThemeProvider>
   );
 };

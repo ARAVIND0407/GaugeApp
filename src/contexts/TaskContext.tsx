@@ -1,8 +1,23 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { TaskContext } from "@/contexts/TaskProviderContext";
-import type { Task } from "@/types/task";
+import type { Task, Priority } from "@/types/task";
 
 const STORAGE_KEY = "gauge_tasks";
+
+function hydrateTask(raw: Partial<Task>): Task {
+  return {
+    id: raw.id ?? crypto.randomUUID(),
+    title: raw.title ?? "",
+    description: raw.description ?? "",
+    priority: raw.priority ?? "Medium",
+    tag: raw.tag ?? "General",
+    completed: raw.completed ?? false,
+    timeSpent: raw.timeSpent ?? 0,
+    startedAt: raw.startedAt ?? null,
+    createdAt: raw.createdAt ?? Date.now(),
+    lastWorkedAt: raw.lastWorkedAt ?? null,
+  };
+}
 
 function loadTasksFromStorage(): Task[] {
   try {
@@ -10,7 +25,7 @@ function loadTasksFromStorage(): Task[] {
     if (!stored) return [];
     const parsed: unknown = JSON.parse(stored);
     if (!Array.isArray(parsed)) return [];
-    return parsed as Task[];
+    return (parsed as Partial<Task>[]).map(hydrateTask);
   } catch {
     return [];
   }
@@ -27,30 +42,32 @@ export const TaskProvider = ({ children }: { children: ReactNode }) => {
     loadActiveTaskIdFromStorage,
   );
 
-  // Persist to localStorage whenever tasks change
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
   }, [tasks]);
 
-  // Tick every second while a task is running (triggers re-renders for elapsed time)
   useEffect(() => {
     if (!activeTaskId) return;
     const id = setInterval(() => {
       setTasks((prev) => [...prev]);
     }, 1000);
-
     return () => clearInterval(id);
   }, [activeTaskId]);
 
-  // ─── Actions ──────────────────────────────────────────────────────────────
-
-  const addTask = (title: string, description: string): void => {
+  const addTask = (
+    title: string,
+    description: string,
+    priority: Priority,
+    tag: string,
+  ): void => {
     setTasks((prev) => [
       ...prev,
       {
         id: crypto.randomUUID(),
         title,
         description,
+        priority,
+        tag,
         completed: false,
         timeSpent: 0,
         startedAt: null,
