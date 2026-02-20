@@ -1,11 +1,5 @@
 import { createContext } from "react";
-
-type Theme = "dark" | "light" | "system";
-
-export type ThemeProviderState = {
-  theme: Theme;
-  setTheme: (theme: Theme) => void;
-};
+import type { ThemeProviderState } from "@/types/theme";
 
 const initialState: ThemeProviderState = {
   theme: "system",
