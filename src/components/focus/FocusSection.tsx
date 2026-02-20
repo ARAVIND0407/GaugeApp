@@ -24,7 +24,7 @@ const QuickStartItem = ({
         {task.title}
       </p>
       <p className="text-xs text-muted-foreground mt-0.5">
-        {task.tag} · {task.priority} priority
+        {task.tag} · {task.focusGoal}m target · {task.priority}
       </p>
     </div>
   </button>

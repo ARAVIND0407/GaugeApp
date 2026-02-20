@@ -22,14 +22,13 @@ const TICKS = Array.from({ length: 60 }, (_, i) => {
 
 type Props = { task: Task };
 
-const GOAL_SECONDS = 25 * 60; // 25-min reference
-
 const ActiveFocus = ({ task }: Props) => {
   const { pauseTask, toggleComplete } = useTask();
   const { setMode } = useUi();
 
+  const goalSeconds = task.focusGoal * 60;
   const sessionTime = getSessionTime(task);
-  const pct = Math.min(100, Math.round((sessionTime / GOAL_SECONDS) * 100));
+  const pct = Math.min(100, Math.round((sessionTime / goalSeconds) * 100));
   const mm = String(Math.floor(sessionTime / 60)).padStart(2, "0");
   const ss = String(sessionTime % 60).padStart(2, "0");
 
@@ -97,6 +96,20 @@ const ActiveFocus = ({ task }: Props) => {
             strokeOpacity={0.05}
             strokeWidth={1}
           />
+          {/* Progress Ring */}
+          <circle
+            cx={0}
+            cy={0}
+            r={108}
+            fill="none"
+            stroke="#A7D129"
+            strokeWidth={2}
+            strokeDasharray={2 * Math.PI * 108}
+            strokeDashoffset={2 * Math.PI * 108 * (1 - pct / 100)}
+            strokeLinecap="round"
+            className="transition-all duration-1000 opacity-20"
+            transform="rotate(-90)"
+          />
           {/* Tick marks */}
           {TICKS.map((t, i) => (
             <line
@@ -111,8 +124,20 @@ const ActiveFocus = ({ task }: Props) => {
               strokeLinecap="round"
             />
           ))}
-          {/* Brand dot at 12 o'clock */}
-          <circle cx={0} cy={-108} r={5} fill="#A7D129" />
+          {/* Brand dot that rotates with seconds */}
+          <circle
+            cx={
+              Math.cos(((sessionTime % 60) / 60) * Math.PI * 2 - Math.PI / 2) *
+              108
+            }
+            cy={
+              Math.sin(((sessionTime % 60) / 60) * Math.PI * 2 - Math.PI / 2) *
+              108
+            }
+            r={5}
+            fill="#A7D129"
+            className="transition-all duration-500 ease-linear"
+          />
         </svg>
 
         {/* Inner circle — timer text */}

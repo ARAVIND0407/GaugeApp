@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { X } from "lucide-react";
 import { useTask } from "@/hooks/useTask";
 import { useUi } from "@/hooks/useUi";
@@ -32,12 +32,15 @@ const TaskInput = () => {
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<Priority>("Medium");
   const [tag, setTag] = useState("Work");
+  const [focusGoal, setFocusGoal] = useState(25);
 
   const titleRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     titleRef.current?.focus();
   }, []);
+
+  const close = useCallback(() => setIsAddingTask(false), [setIsAddingTask]);
 
   // Close on Escape
   useEffect(() => {
@@ -46,14 +49,12 @@ const TaskInput = () => {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, []);
-
-  const close = () => setIsAddingTask(false);
+  }, [close]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
-    addTask(title.trim(), description.trim(), priority, tag);
+    addTask(title.trim(), description.trim(), priority, tag, focusGoal);
     close();
   };
 
@@ -118,8 +119,8 @@ const TaskInput = () => {
             />
           </div>
 
-          {/* Priority + Tag row */}
-          <div className="flex items-start gap-6">
+          {/* Priority + Tag + Goal row */}
+          <div className="grid grid-cols-2 gap-x-6 gap-y-5">
             {/* Priority */}
             <div className="flex flex-col gap-2">
               <label className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
@@ -141,7 +142,7 @@ const TaskInput = () => {
             </div>
 
             {/* Tag */}
-            <div className="flex flex-col gap-2 flex-1">
+            <div className="flex flex-col gap-2">
               <label className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
                 Tag
               </label>
@@ -156,6 +157,21 @@ const TaskInput = () => {
                   </option>
                 ))}
               </select>
+            </div>
+
+            {/* Focus Goal */}
+            <div className="flex flex-col gap-2">
+              <label className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                Focus Goal (min)
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={480}
+                value={focusGoal}
+                onChange={(e) => setFocusGoal(Number(e.target.value))}
+                className="w-full bg-background border border-border rounded-lg px-3 py-1.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/50 transition-all"
+              />
             </div>
           </div>
 

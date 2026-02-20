@@ -1,4 +1,4 @@
-import { Square, CheckSquare2, X, Play, Clock } from "lucide-react";
+import { Square, CheckSquare2, X, Play, Clock, Target } from "lucide-react";
 import { useTask } from "@/hooks/useTask";
 import { useUi } from "@/hooks/useUi";
 import { formatTime, getActiveTime } from "@/utils/helperFunction";
@@ -92,9 +92,17 @@ const TaskCard = ({ task, dimmed = false }: Props) => {
             {task.tag}
           </span>
 
+          {/* Goal */}
+          {!task.completed && (
+            <span className="flex items-center gap-1 text-[11px] text-muted-foreground/60 font-medium">
+              <Target size={10} className="text-primary/70" />
+              {task.focusGoal}m goal
+            </span>
+          )}
+
           {/* Time */}
           {(isActive ? getActiveTime(task) : task.timeSpent) > 0 && (
-            <span className="flex items-center gap-1 text-[11px] text-muted-foreground/50">
+            <span className="flex items-center gap-1 text-[11px] text-muted-foreground/50 border-l border-border pl-2 ml-1">
               <Clock size={10} />
               {formatTime(isActive ? getActiveTime(task) : task.timeSpent)}
             </span>

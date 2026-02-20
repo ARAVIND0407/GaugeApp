@@ -6,6 +6,7 @@ export type Task = {
   description: string;
   priority: Priority;
   tag: string;
+  focusGoal: number; // minutes
   completed: boolean;
   timeSpent: number;
   startedAt: number | null;
@@ -16,7 +17,14 @@ export type Task = {
 export type TaskContextState = {
   tasks: Task[];
   activeTaskId: string | null;
-  addTask: (title: string, description: string, priority: Priority, tag: string) => void;
+  focusHistory: Record<string, number>; // dateString (YYYY-MM-DD) -> seconds
+  addTask: (
+    title: string,
+    description: string,
+    priority: Priority,
+    tag: string,
+    focusGoal: number,
+  ) => void;
   removeTask: (id: string) => void;
   toggleComplete: (id: string) => void;
   startTask: (id: string) => void;

@@ -1,5 +1,4 @@
-import type { Task, DailyFocusEntry } from "@/types/task";
-export type { DailyFocusEntry } from "@/types/task";
+import type { Task } from "@/types/task";
 
 // ── "HH:MM:SS" — used in task cards ───────────────────────────────────────
 export const formatTime = (timeInSec: number): string => {
@@ -16,7 +15,7 @@ export const formatMinSec = (timeInSec: number): string => {
   return `${String(m).padStart(2, "0")} : ${String(s).padStart(2, "0")}`;
 };
 
-// ── "6s" / "14m" / "1h 32m" — used in stats bar ──────────────────────────
+// ── "6s" / "14m" / "1h 32m" — human readable ───────────────────────────────
 export const formatHuman = (seconds: number): string => {
   if (seconds < 60) return `${seconds}s`;
   const h = Math.floor(seconds / 3600);
@@ -25,48 +24,113 @@ export const formatHuman = (seconds: number): string => {
   return `${m}m`;
 };
 
-// ── Total running time (past + current live session) ──────────────────────
 export const getActiveTime = (task: Task): number =>
   task.startedAt !== null
     ? task.timeSpent + Math.floor((Date.now() - task.startedAt) / 1000)
     : task.timeSpent;
 
-// ── Current session elapsed only ──────────────────────────────────────────
 export const getSessionTime = (task: Task): number =>
   task.startedAt !== null
     ? Math.floor((Date.now() - task.startedAt) / 1000)
     : 0;
 
-// ── Date key for a task's last-worked date ────────────────────────────────
-export const getTaskDateKey = (task: Task): string | null => {
-  if (!task.lastWorkedAt) return null;
-  return new Date(task.lastWorkedAt).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
+// ── Focus data for charts ──────────────────────────────────────────────────
+export const getTaskWeekdayKey = (timestamp: number): string => {
+  return new Date(timestamp).toLocaleDateString("en-US", {
+    weekday: "short",
   });
 };
 
-// ── Aggregate focus time per day ──────────────────────────────────────────
-export const buildDailyFocusData = (tasks: Task[]): DailyFocusEntry[] => {
-  const map: Record<string, number> = {};
+export const buildFocusActivityData = (tasks: Task[]) => {
+  const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const data = days.map((day) => ({ day, minutes: 0 }));
+
   tasks.forEach((task) => {
-    const key = getTaskDateKey(task);
-    if (!key) return;
-    map[key] = (map[key] ?? 0) + getActiveTime(task);
+    if (task.lastWorkedAt) {
+      const day = getTaskWeekdayKey(task.lastWorkedAt);
+      const entry = data.find((d) => d.day === day);
+      if (entry) {
+        entry.minutes += Math.floor(getActiveTime(task) / 60);
+      }
+    }
   });
-  return Object.entries(map).map(([date, focusTime]) => ({ date, focusTime }));
+
+  return data;
 };
 
-// ── Sum of all focus time that was logged today ───────────────────────────
-export const getTodayFocusTime = (tasks: Task[]): number => {
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const todayMs = todayStart.getTime();
+export const buildTasksCompletedData = (tasks: Task[]) => {
+  const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const data = days.map((day) => ({ day, count: 0 }));
 
-  return tasks.reduce((sum, task) => {
-    const workedToday =
-      (task.lastWorkedAt && task.lastWorkedAt >= todayMs) ||
-      (task.startedAt && task.startedAt >= todayMs);
-    return workedToday ? sum + getActiveTime(task) : sum;
-  }, 0);
+  tasks
+    .filter((t) => t.completed)
+    .forEach((task) => {
+      const day = getTaskWeekdayKey(task.lastWorkedAt || task.createdAt);
+      const entry = data.find((d) => d.day === day);
+      if (entry) {
+        entry.count += 1;
+      }
+    });
+
+  return data;
+};
+
+export const calculateStreak = (history: Record<string, number>): number => {
+  const dates = Object.keys(history).sort((a, b) => b.localeCompare(a));
+  if (dates.length === 0) return 0;
+
+  let streak = 0;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  for (let i = 0; i < 30; i++) {
+    const checkDate = new Date(today);
+    checkDate.setDate(today.getDate() - i);
+    const key = checkDate.toISOString().split("T")[0];
+
+    if (history[key] && history[key] > 0) {
+      streak++;
+    } else if (i === 0) {
+      // If today is empty, streak might still be active from yesterday
+      continue;
+    } else {
+      break;
+    }
+  }
+  return streak;
+};
+
+export const getMostFocusedTask = (tasks: Task[]): Task | null => {
+  if (tasks.length === 0) return null;
+  return tasks.reduce(
+    (max, task) => (getActiveTime(task) > getActiveTime(max) ? task : max),
+    tasks[0],
+  );
+};
+
+export const getRealHeatmapData = (history: Record<string, number>) => {
+  const data = [];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  for (let i = 27; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    const key = d.toISOString().split("T")[0];
+    const seconds = history[key] || 0;
+
+    // Intensity mapping (0 to 3) based on minutes
+    const minutes = seconds / 60;
+    let intensity = 0;
+    if (minutes > 120) intensity = 3;
+    else if (minutes > 60) intensity = 2;
+    else if (minutes > 5) intensity = 1;
+
+    data.push({
+      intensity,
+      active: seconds > 0,
+      date: key,
+    });
+  }
+  return data;
 };

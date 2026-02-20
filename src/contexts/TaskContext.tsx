@@ -2,7 +2,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import { TaskContext } from "@/contexts/TaskProviderContext";
 import type { Task, Priority } from "@/types/task";
 
-const STORAGE_KEY = "gauge_tasks";
+const TASKS_STORAGE_KEY = "gauge_tasks";
+const HISTORY_STORAGE_KEY = "gauge_focus_history";
 
 function hydrateTask(raw: Partial<Task>): Task {
   return {
@@ -11,6 +12,7 @@ function hydrateTask(raw: Partial<Task>): Task {
     description: raw.description ?? "",
     priority: raw.priority ?? "Medium",
     tag: raw.tag ?? "General",
+    focusGoal: raw.focusGoal ?? 25,
     completed: raw.completed ?? false,
     timeSpent: raw.timeSpent ?? 0,
     startedAt: raw.startedAt ?? null,
@@ -21,7 +23,7 @@ function hydrateTask(raw: Partial<Task>): Task {
 
 function loadTasksFromStorage(): Task[] {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = localStorage.getItem(TASKS_STORAGE_KEY);
     if (!stored) return [];
     const parsed: unknown = JSON.parse(stored);
     if (!Array.isArray(parsed)) return [];
@@ -31,24 +33,55 @@ function loadTasksFromStorage(): Task[] {
   }
 }
 
+function loadHistoryFromStorage(): Record<string, number> {
+  try {
+    const stored = localStorage.getItem(HISTORY_STORAGE_KEY);
+    if (!stored) return {};
+    return JSON.parse(stored);
+  } catch {
+    return {};
+  }
+}
+
 function loadActiveTaskIdFromStorage(): string | null {
   const tasks = loadTasksFromStorage();
   return tasks.find((t) => t.startedAt !== null)?.id ?? null;
 }
 
+const getDateKey = (timestamp: number) => {
+  const d = new Date(timestamp);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
 export const TaskProvider = ({ children }: { children: ReactNode }) => {
   const [tasks, setTasks] = useState<Task[]>(loadTasksFromStorage);
+  const [focusHistory, setFocusHistory] = useState<Record<string, number>>(
+    loadHistoryFromStorage,
+  );
   const [activeTaskId, setActiveTaskId] = useState<string | null>(
     loadActiveTaskIdFromStorage,
   );
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+    localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(tasks));
   }, [tasks]);
+
+  useEffect(() => {
+    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(focusHistory));
+  }, [focusHistory]);
 
   useEffect(() => {
     if (!activeTaskId) return;
     const id = setInterval(() => {
+      // Update the live task tick and also the daily history
+      const now = Date.now();
+      const dateKey = getDateKey(now);
+
+      setFocusHistory((prev) => ({
+        ...prev,
+        [dateKey]: (prev[dateKey] || 0) + 1,
+      }));
+
       setTasks((prev) => [...prev]);
     }, 1000);
     return () => clearInterval(id);
@@ -59,6 +92,7 @@ export const TaskProvider = ({ children }: { children: ReactNode }) => {
     description: string,
     priority: Priority,
     tag: string,
+    focusGoal: number,
   ): void => {
     setTasks((prev) => [
       ...prev,
@@ -68,6 +102,7 @@ export const TaskProvider = ({ children }: { children: ReactNode }) => {
         description,
         priority,
         tag,
+        focusGoal,
         completed: false,
         timeSpent: 0,
         startedAt: null,
@@ -125,6 +160,7 @@ export const TaskProvider = ({ children }: { children: ReactNode }) => {
       value={{
         tasks,
         activeTaskId,
+        focusHistory,
         addTask,
         removeTask,
         startTask,
