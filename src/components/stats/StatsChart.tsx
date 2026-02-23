@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   AreaChart,
   Area,
@@ -7,12 +8,34 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { buildWeeklyFocusData } from "@/utils/helperFunction";
+
+type DailyEntry = { day: string; minutes: number };
+type WeeklyEntry = { week: string; minutes: number };
 
 type Props = {
-  data: { day: string; minutes: number }[];
+  /** Pre-built Mon–Sun data for the current week */
+  data: DailyEntry[];
+  /** Raw history so we can build weekly aggregation ourselves */
+  focusHistory: Record<string, number>;
 };
 
-const StatsChart = ({ data }: Props) => {
+type View = "daily" | "weekly";
+
+const StatsChart = ({ data: dailyData, focusHistory }: Props) => {
+  const [view, setView] = useState<View>("daily");
+
+  const weeklyData = buildWeeklyFocusData(focusHistory);
+
+  const chartData: (DailyEntry | WeeklyEntry)[] =
+    view === "daily" ? dailyData : weeklyData;
+
+  const xKey = view === "daily" ? "day" : "week";
+  const subtitle =
+    view === "daily"
+      ? "Minutes per day (this week)"
+      : "Minutes per week (last 8 weeks)";
+
   return (
     <div className="rounded-2xl border border-border bg-card p-6">
       <div className="flex items-center justify-between mb-6">
@@ -20,13 +43,27 @@ const StatsChart = ({ data }: Props) => {
           <h3 className="text-base font-semibold text-foreground">
             Focus Activity
           </h3>
-          <p className="text-xs text-muted-foreground mt-1">Minutes per day</p>
+          <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
         </div>
-        <div className="flex bg-muted/50 rounded-lg p-1">
-          <button className="px-3 py-1 text-xs font-medium bg-primary text-primary-foreground rounded-md shadow-sm">
+        <div className="flex bg-muted/50 rounded-lg p-1 gap-1">
+          <button
+            onClick={() => setView("daily")}
+            className={`px-3 py-1 text-xs font-medium rounded-md transition-all cursor-pointer ${
+              view === "daily"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
             Daily
           </button>
-          <button className="px-3 py-1 text-xs font-medium text-muted-foreground">
+          <button
+            onClick={() => setView("weekly")}
+            className={`px-3 py-1 text-xs font-medium rounded-md transition-all cursor-pointer ${
+              view === "weekly"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
             Weekly
           </button>
         </div>
@@ -35,7 +72,7 @@ const StatsChart = ({ data }: Props) => {
       <div className="h-[240px] w-full">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart
-            data={data}
+            data={chartData}
             margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
           >
             <defs>
@@ -50,18 +87,19 @@ const StatsChart = ({ data }: Props) => {
               stroke="oklch(var(--border) / 0.3)"
             />
             <XAxis
-              dataKey="day"
+              dataKey={xKey}
               axisLine={false}
               tickLine={false}
-              tick={{ fill: "oklch(var(--muted-foreground))", fontSize: 12 }}
+              tick={{ fill: "oklch(var(--muted-foreground))", fontSize: 11 }}
               dy={10}
+              interval="preserveStartEnd"
             />
             <YAxis
               axisLine={false}
               tickLine={false}
               tick={{ fill: "oklch(var(--muted-foreground))", fontSize: 12 }}
-              domain={[0, 200]}
-              ticks={[0, 50, 100, 150, 200]}
+              domain={[0, "auto"]}
+              allowDecimals={false}
             />
             <Tooltip
               contentStyle={{
@@ -70,6 +108,13 @@ const StatsChart = ({ data }: Props) => {
                 borderRadius: "12px",
                 fontSize: "12px",
               }}
+              formatter={(val: number | undefined) => [
+                `${val ?? 0} min`,
+                "Focus",
+              ]}
+              labelFormatter={(label) =>
+                view === "weekly" ? `Week of ${label}` : label
+              }
             />
             <Area
               type="monotone"

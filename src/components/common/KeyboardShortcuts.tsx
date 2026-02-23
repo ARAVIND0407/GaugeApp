@@ -22,6 +22,7 @@ const KeyboardShortcuts = () => {
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       switch (e.key.toLowerCase()) {
         case "n":
+          e.preventDefault();
           setIsAddingTask(true);
           break;
         case "t":

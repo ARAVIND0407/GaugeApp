@@ -169,7 +169,10 @@ const TaskInput = () => {
                 min={1}
                 max={480}
                 value={focusGoal}
-                onChange={(e) => setFocusGoal(Number(e.target.value))}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value, 10);
+                  setFocusGoal(isNaN(v) || v < 1 ? 1 : Math.min(v, 480));
+                }}
                 className="w-full bg-background border border-border rounded-lg px-3 py-1.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/50 transition-all"
               />
             </div>

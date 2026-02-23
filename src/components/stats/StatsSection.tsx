@@ -26,7 +26,7 @@ interface StatCardProps {
 const StatsSection = () => {
   const { tasks, focusHistory } = useTask();
 
-  const focusActivityData = buildFocusActivityData(tasks);
+  const focusActivityData = buildFocusActivityData(focusHistory);
   const tasksCompletedData = buildTasksCompletedData(tasks);
 
   const totalFocusSec = tasks.reduce((sum, t) => sum + getActiveTime(t), 0);
@@ -133,7 +133,7 @@ const StatsSection = () => {
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 gap-6">
-        <StatsChart data={focusActivityData} />
+        <StatsChart data={focusActivityData} focusHistory={focusHistory} />
         <TasksCompletedChart data={tasksCompletedData} />
       </div>
 

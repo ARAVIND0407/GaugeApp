@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, useCallback, type ReactNode } from "react";
 import { TaskContext } from "@/contexts/TaskProviderContext";
 import type { Task, Priority } from "@/types/task";
 
@@ -37,7 +37,10 @@ function loadHistoryFromStorage(): Record<string, number> {
   try {
     const stored = localStorage.getItem(HISTORY_STORAGE_KEY);
     if (!stored) return {};
-    return JSON.parse(stored);
+    const parsed: unknown = JSON.parse(stored);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
+      return {};
+    return parsed as Record<string, number>;
   } catch {
     return {};
   }
@@ -70,22 +73,39 @@ export const TaskProvider = ({ children }: { children: ReactNode }) => {
     localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(focusHistory));
   }, [focusHistory]);
 
+  // Tick: update focusHistory every second while a task is active.
+  // We do NOT touch `tasks` here — the timer display derives elapsed time
+  // from `startedAt` directly in getSessionTime(), so no state mutation needed.
   useEffect(() => {
     if (!activeTaskId) return;
     const id = setInterval(() => {
-      // Update the live task tick and also the daily history
-      const now = Date.now();
-      const dateKey = getDateKey(now);
-
+      const dateKey = getDateKey(Date.now());
       setFocusHistory((prev) => ({
         ...prev,
         [dateKey]: (prev[dateKey] || 0) + 1,
       }));
-
-      setTasks((prev) => [...prev]);
     }, 1000);
     return () => clearInterval(id);
   }, [activeTaskId]);
+
+  // --- pauseTask defined before removeTask/toggleComplete so they can call it safely ---
+  const pauseTask = useCallback((): void => {
+    setTasks((prev) =>
+      prev.map((task) =>
+        task.startedAt !== null
+          ? {
+              ...task,
+              timeSpent:
+                task.timeSpent +
+                Math.floor((Date.now() - task.startedAt) / 1000),
+              startedAt: null,
+              lastWorkedAt: Date.now(),
+            }
+          : task,
+      ),
+    );
+    setActiveTaskId(null);
+  }, []);
 
   const addTask = (
     title: string,
@@ -113,46 +133,68 @@ export const TaskProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const removeTask = (id: string): void => {
-    if (activeTaskId === id) pauseTask();
-    setTasks((prev) => prev.filter((task) => task.id !== id));
+    // Pause first if this is the active task, then remove
+    setTasks((prev) => {
+      const target = prev.find((t) => t.id === id);
+      if (target?.startedAt !== null && target) {
+        // Commit the pending time before deletion
+        setActiveTaskId(null);
+      }
+      return prev.filter((task) => task.id !== id);
+    });
   };
 
   const toggleComplete = (id: string): void => {
-    pauseTask();
-    setTasks((prev) =>
-      prev.map((task) =>
+    // Only pause if this is the currently active task
+    setTasks((prev) => {
+      const target = prev.find((t) => t.id === id);
+      const isActive =
+        target?.id === activeTaskId && target?.startedAt !== null;
+
+      if (isActive) {
+        setActiveTaskId(null);
+        return prev.map((task) =>
+          task.id === id
+            ? {
+                ...task,
+                timeSpent:
+                  task.timeSpent +
+                  Math.floor((Date.now() - (task.startedAt ?? 0)) / 1000),
+                startedAt: null,
+                lastWorkedAt: Date.now(),
+                completed: !task.completed,
+              }
+            : task,
+        );
+      }
+
+      return prev.map((task) =>
         task.id === id ? { ...task, completed: !task.completed } : task,
-      ),
-    );
+      );
+    });
   };
 
   const startTask = (id: string): void => {
+    // Commit any currently running task first, then start the new one
     setTasks((prev) =>
-      prev.map((task) =>
-        task.id === id
-          ? { ...task, startedAt: Date.now() }
-          : { ...task, startedAt: null },
-      ),
+      prev.map((task) => {
+        if (task.startedAt !== null && task.id !== id) {
+          // Pause the previously running task
+          return {
+            ...task,
+            timeSpent:
+              task.timeSpent + Math.floor((Date.now() - task.startedAt) / 1000),
+            startedAt: null,
+            lastWorkedAt: Date.now(),
+          };
+        }
+        if (task.id === id) {
+          return { ...task, startedAt: Date.now() };
+        }
+        return task;
+      }),
     );
     setActiveTaskId(id);
-  };
-
-  const pauseTask = (): void => {
-    setTasks((prev) =>
-      prev.map((task) =>
-        task.startedAt !== null
-          ? {
-              ...task,
-              timeSpent:
-                task.timeSpent +
-                Math.floor((Date.now() - task.startedAt) / 1000),
-              startedAt: null,
-              lastWorkedAt: Date.now(),
-            }
-          : task,
-      ),
-    );
-    setActiveTaskId(null);
   };
 
   return (

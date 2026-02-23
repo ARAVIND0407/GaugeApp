@@ -30,8 +30,3 @@ export type TaskContextState = {
   startTask: (id: string) => void;
   pauseTask: () => void;
 };
-
-export type DailyFocusEntry = {
-  date: string;
-  focusTime: number;
-};
