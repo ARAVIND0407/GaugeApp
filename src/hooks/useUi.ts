@@ -1,5 +1,6 @@
 import { useContext } from "react";
-import { UiProviderContext, type UiContextState } from "@/contexts/UiProviderContext";
+import { UiProviderContext } from "@/contexts/UiProviderContext";
+import type { UiContextState } from "@/types/ui";
 
 export const useUi = (): UiContextState => {
   const context = useContext(UiProviderContext);
