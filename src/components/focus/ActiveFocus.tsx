@@ -1,8 +1,13 @@
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef, useState } from "react";
 import { Square, Pause, Check } from "lucide-react";
+import { toast } from "sonner";
 import { useTask } from "@/hooks/useTask";
 import { useUi } from "@/hooks/useUi";
-import { getSessionTime } from "@/utils/helperFunction";
+import {
+  getActiveTime,
+  formatHuman,
+  getTodayFocusTime,
+} from "@/utils/helperFunction";
 import type { Task } from "@/types/task";
 
 // ── Tick mark precomputation ───────────────────────────────────────────────
@@ -22,26 +27,107 @@ const TICKS = Array.from({ length: 60 }, (_, i) => {
 
 type Props = { task: Task };
 
-const GOAL_SECONDS = 25 * 60; // 25-min reference
+const StatCell = ({ label, value }: { label: string; value: string }) => (
+  <div className="flex flex-col items-center py-4 px-2">
+    <span className="text-base font-semibold tabular-nums text-foreground">
+      {value}
+    </span>
+    <span className="text-[11px] text-muted-foreground mt-0.5">{label}</span>
+  </div>
+);
 
 const ActiveFocus = ({ task }: Props) => {
-  const { pauseTask, toggleComplete } = useTask();
+  const { pauseTask, toggleComplete, focusHistory } = useTask();
   const { setMode } = useUi();
 
-  const sessionTime = getSessionTime(task);
-  const pct = Math.min(100, Math.round((sessionTime / GOAL_SECONDS) * 100));
-  const mm = String(Math.floor(sessionTime / 60)).padStart(2, "0");
-  const ss = String(sessionTime % 60).padStart(2, "0");
+  // ── Smooth live time via requestAnimationFrame ─────────────────────────
+  // liveSession = seconds elapsed in this specific run (resets on pause)
+  // liveTotal   = all accumulated time including previous sessions (continues after resume)
+  const [liveSession, setLiveSession] = useState<number>(() =>
+    task.startedAt !== null ? (Date.now() - task.startedAt) / 1000 : 0,
+  );
+  const [liveTotal, setLiveTotal] = useState<number>(() =>
+    task.startedAt !== null
+      ? task.timeSpent + (Date.now() - task.startedAt) / 1000
+      : task.timeSpent,
+  );
+  const rafRef = useRef<number>(0);
+  // goalSeconds declared here for use by both the RAF loop and the suppression check
+  const goalSeconds = Math.max(1, task.focusGoal * 60);
+  // Seed as true if the session was already past goal when mounted,
+  // so we don't immediately toast when resuming an overtime session.
+  // Must be initialised to false here (pure); the actual check runs in a mount effect.
+  const hasWarnedRef = useRef<boolean>(false);
+
+  // On mount: if the session was already past goal (e.g. app refreshed mid-overtime),
+  // mark as warned so we don't fire an immediate toast.
+  useEffect(() => {
+    if (task.startedAt !== null) {
+      const elapsed = (Date.now() - task.startedAt) / 1000;
+      if (elapsed >= goalSeconds) hasWarnedRef.current = true;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentionally empty — runs once on mount only
+
+  useEffect(() => {
+    const tick = () => {
+      const sessionElapsed =
+        task.startedAt !== null ? (Date.now() - task.startedAt) / 1000 : 0;
+      const totalElapsed = task.timeSpent + sessionElapsed;
+
+      setLiveSession(sessionElapsed);
+      setLiveTotal(totalElapsed);
+
+      // One-shot overtime toast — uses total time vs goal
+      if (!hasWarnedRef.current && totalElapsed / goalSeconds >= 1) {
+        hasWarnedRef.current = true;
+        toast.warning(
+          `⏱ Goal reached! ${task.focusGoal}m target passed. Keep going or wrap up.`,
+          { duration: 6000, id: "overtime" },
+        );
+      }
+
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [task.startedAt, task.timeSpent, task.focusGoal, goalSeconds]);
+
+  // Clock display uses the TOTAL (cumulative) time — so it continues after pause/resume
+  const totalTimeSec = Math.floor(liveTotal);
+  const sessionTimeSec = Math.floor(liveSession);
+
+  // Progress and display based on total accumulated time vs goal
+  const pct = Math.min(200, Math.round((totalTimeSec / goalSeconds) * 100));
+  const mm = String(Math.floor(totalTimeSec / 60)).padStart(2, "0");
+  const ss = String(totalTimeSec % 60).padStart(2, "0");
+
+  // Smooth angle for the dot — also uses total time for continuity
+  const smoothAngle = (liveTotal / 60) * Math.PI * 2 - Math.PI / 2;
+  const dotX = Math.cos(smoothAngle) * 108;
+  const dotY = Math.sin(smoothAngle) * 108;
+
+  // ── Ring color: green → amber → orange → red as pct approaches 100 ──
+  // Hue travels from 90° (lime-green) down to 0° (red) over 0–100%
+  const clampedPct = Math.min(pct, 100);
+  const hue = Math.round(90 - clampedPct * 0.9); // 90 → 0
+  const sat = Math.round(75 + clampedPct * 0.2); // 75% → 95%
+  const lit = pct >= 100 ? 55 : 50;
+  const ringColor = `hsl(${hue}, ${sat}%, ${lit}%)`;
+  const isOvertime = pct >= 100;
+
+  // Stats
+  const totalOnTask = getActiveTime(task);
+  const todayFocus = getTodayFocusTime(focusHistory);
 
   const handleStop = useCallback(() => {
     pauseTask();
   }, [pauseTask]);
 
   const handleDone = useCallback(() => {
-    pauseTask();
     toggleComplete(task.id);
     setMode("task");
-  }, [pauseTask, toggleComplete, task.id, setMode]);
+  }, [toggleComplete, task.id, setMode]);
 
   // Space → pause
   useEffect(() => {
@@ -97,6 +183,20 @@ const ActiveFocus = ({ task }: Props) => {
             strokeOpacity={0.05}
             strokeWidth={1}
           />
+          {/* Progress Ring - color shifts green→amber→red with pct */}
+          <circle
+            cx={0}
+            cy={0}
+            r={108}
+            fill="none"
+            stroke={ringColor}
+            strokeWidth={isOvertime ? 3 : 2}
+            strokeDasharray={2 * Math.PI * 108}
+            strokeDashoffset={2 * Math.PI * 108 * (1 - clampedPct / 100)}
+            strokeLinecap="round"
+            className={`${isOvertime ? "opacity-60" : "opacity-25"}`}
+            transform="rotate(-90)"
+          />
           {/* Tick marks */}
           {TICKS.map((t, i) => (
             <line
@@ -111,8 +211,8 @@ const ActiveFocus = ({ task }: Props) => {
               strokeLinecap="round"
             />
           ))}
-          {/* Brand dot at 12 o'clock */}
-          <circle cx={0} cy={-108} r={5} fill="#A7D129" />
+          {/* Brand dot — color matches ring */}
+          <circle cx={dotX} cy={dotY} r={5} fill={ringColor} />
         </svg>
 
         {/* Inner circle — timer text */}
@@ -171,6 +271,13 @@ const ActiveFocus = ({ task }: Props) => {
           </button>
           <span className="text-xs text-muted-foreground">Done</span>
         </div>
+      </div>
+
+      {/* ── Stats bar ── */}
+      <div className="w-full grid grid-cols-3 divide-x divide-border border border-border rounded-xl bg-muted/20 mt-6">
+        <StatCell label="This session" value={formatHuman(sessionTimeSec)} />
+        <StatCell label="Total on task" value={formatHuman(totalOnTask)} />
+        <StatCell label="Today's focus" value={formatHuman(todayFocus)} />
       </div>
 
       {/* ── Keyboard hint ── */}

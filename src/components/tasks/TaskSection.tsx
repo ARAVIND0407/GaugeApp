@@ -22,7 +22,7 @@ const TaskSection = () => {
           {activeTasks.length > 0
             ? `${activeTasks.length} remaining${completedTasks.length > 0 ? ` · ${completedTasks.length} completed` : ""}`
             : completedTasks.length > 0
-              ? `All ${completedTasks.length} tasks completed 🎉`
+              ? `All ${completedTasks.length} tasks completed`
               : "No tasks yet — press N to add one"}
         </p>
       </div>
